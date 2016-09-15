@@ -1,0 +1,19 @@
+<h1>Welcome to our App</h1>
+<h2> Signup form</h2>
+<%= form_for :user, url: '/users' do |f| %>
+
+	Name: <%= f.text_field :name %> <br>
+	<br>
+	Email: <%= f.text_field :email %> <br>
+	<br>
+    Password: <%= f.password_field :password, hint: 'No special characters.' %> <br>
+    <br>
+	Password Confirmation: <%= f.password_field :password_confirmation %> <br>
+	<br>
+	Gender: <%= f.select :gender, [['F'], ['M']] %> <br>
+	<br>
+	Profile Picture: <%= f.file_field :profile_picture %> <br>
+	<br>
+	<%= f.submit "Submit" %>
+
+  <% end %>
