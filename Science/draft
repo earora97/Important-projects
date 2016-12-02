@@ -1,0 +1,104 @@
+﻿SCIENCE PROJECT
+
+- Eavanshi Arora
+- 201501115
+
+BASICS
+
+Before we begin, we will have a look at some basic definations that will help us in understanding the following concepts.
+
+1.) Polynomial Sequence - A sequence of polynomials , for i = 0, 1, 2, ..., where  is exactly of degree i for all i.
+Alternative Defination -  A sequence of polynomials indexed by the nonnegative integers 0, 1, 2, 3, ..., in which each index is equal to the degree of the corresponding polynomial.
+
+2.) Second-order linear differential equation - A second order differential equation is an equation involving the unknown function y, its derivatives y' and y'', and the variable x. 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 1.) LAGUERRE POLYNOMIAL
+
+Laguerre's equation: xy’’ + (1-x)y’ + ny = 0  (which is a second-order linear differential equation). 
+	Laguerre polynomials are solution to Laguerre’s equation.
+	This equation has nonsingular solutions only if n is a non-negative integer.
+
+
+
+
+Defination :  
+
+
+
+
+
+
+First few Laguerre polynomials are as given in the table below:
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Their graphs are as shown below:
+
+
+
+
+Also,
+	One can also define the Laguerre polynomials recursively, defining the first two polynomials as
+	L(0)(x) = 1
+	L(1)(x) = 1-x
+Generating Function:
+
+
+Using Recurrance Relation : 
+	The recurrance relation for any k>=1 can be given as:
+
+
+
+The closed form is:
+
+
+
+
+
+Extending it to Generality:
+	More generally, the name Laguerre polynomials is used for solutions of xy’’ + (α+1-x)y’ 	+ ny = 0 , for any arbitary real α.
+
+ 
+
