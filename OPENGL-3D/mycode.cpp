@@ -6,7 +6,6 @@
 #include <GL/glew.h>
 #include <GL/gl.h>
 #include <GLFW/glfw3.h>
-#include "coor.cpp"
 #define GLM_FORCE_RADIANS
 #include <glm/glm.hpp>
 #include <glm/gtx/transform.hpp>
@@ -68,20 +67,23 @@ map <string, Structure> TEXT;
 
 /* Function Definations */
 void check_cube_fall();
+void values();
 void initialise_all();
 void level_up();
+void rotateslow(GLFWwindow* window);
 /* Function Definations */
 
 
 /*Initialisations */
 int x[200][200][200] = {1};
-int score=0,i,j=0,count=0,var=1,countstar=2;
-float w=0.5f,h=0.25f,w2 = 0.5f, h2=0.5f,temp;
+int score=0,i,j=0,count=0,var=1,countstar=2,direction=0,fallen=0,bridgeflag3=0,bridgeflag5=0;
+float w=0.5f,h=0.25f,w2 = 0.5f, h2=0.5f,temp,jump=0.0625f,gotox,gotoy;
 float camera_rotation_angle = 90 , block_rotation_angle = 90;
 float boardx = -4.5f,boardy = -4.5f;
-float block1X = -2.5f , block1Y = -2.5f, block1Z = 0.0f;
-float block2X = -2.5f , block2Y = -2.5f, block2Z = 0.0f;
+float block1X = -3.5f , block1Y = -3.5f, block1Z = 0.0f;
+float block2X = -3.5f , block2Y = -3.5f, block2Z = 0.0f;
 float translateInX = 0.0f, translateInY = 0.0f;
+double mouse_pos_x, mouse_pos_y;
 float cuboid_lengthX=w,cuboid_lengthY=w,cuboid_lengthZ=2*w,rotationX=0,rotationY=0;
 cubeS cube1,cube2;
 stars stararr[4];
@@ -307,88 +309,39 @@ void keyboard (GLFWwindow* window, int key, int scancode, int action, int mods)
 				break;
 			case GLFW_KEY_RIGHT:
 				score++;
-				cube1.rotationX+=90;
-				if (cube1.rotationX>360)
-					cube1.rotationX=90;
-				cube1.x+=cuboid_lengthX;
-
-				//matrices
-				rotateCube = glm::rotate((float)(90*M_PI/180.0f), glm::vec3(0,1,0));
-				translateInX=cuboid_lengthX;
-				translateCubeEdge = glm::translate(glm::vec3(-1*(translateInX),0.0,cube1.height));
-				translateCube1EdgeR = glm::translate(glm::vec3(0.0,0.0,-1*cube1.height));
-				rotationOverallCube = translateCube1EdgeR * rotateCube * translateCubeEdge * rotationOverallCube;
-
-				//interchange cuboid z x lenghts
-				temp=cuboid_lengthZ;
-				cuboid_lengthZ=cuboid_lengthX;
-				cuboid_lengthX=temp;
-				check_cube_fall();
-
+				direction=1;
 				break;
 			case GLFW_KEY_LEFT:
 				score++;
-				cube1.rotationX-=90;
-				if (cube1.rotationX<-360)
-					cube1.rotationX=-90;
-
-				//Matrices
-				rotateCube = glm::rotate((float)(-90*M_PI/180.0f), glm::vec3(0,1,0));
-				translateInX=cuboid_lengthZ;
-				translateCubeEdge = glm::translate(glm::vec3(0.0,0.0,cube1.height));
-				translateCube1EdgeR = glm::translate(glm::vec3(cuboid_lengthZ,0.0,-1*cube1.height));
-				rotationOverallCube = translateCube1EdgeR * rotateCube * translateCubeEdge * rotationOverallCube;
-
-
-				//interchange cuboid z x lenghts
-				temp=cuboid_lengthZ;
-				cuboid_lengthZ=cuboid_lengthX;
-				cuboid_lengthX=temp;
-
-				//position cube1
-				cube1.x-=cuboid_lengthX;
-				//position cube2
-
-				check_cube_fall();
+				direction=2;
 				break;
 			case GLFW_KEY_UP:
 				score++;
-				cube1.rotationY-=90;
-				if (cube1.rotationY<-360)
-					cube1.rotationY=-90;
-				cube1.y+=cuboid_lengthY;
-
-				rotateCube = glm::rotate((float)(-90*M_PI/180.0f), glm::vec3(1,0,0));
-				translateInY=cuboid_lengthY;
-				translateCubeEdge = glm::translate(glm::vec3(0.0,-1*(translateInY),cube1.height));
-				translateCube1EdgeR = glm::translate(glm::vec3(0.0,0.0,-1*cube1.height));
-				rotationOverallCube = translateCube1EdgeR * rotateCube * translateCubeEdge * rotationOverallCube;
-
-				//interchange cuboid z x lenghts
-				temp=cuboid_lengthZ;
-				cuboid_lengthZ=cuboid_lengthY;
-				cuboid_lengthY=temp;
-				check_cube_fall();
+				direction=3;
 				break;
 			case GLFW_KEY_DOWN:
 				score++;
-				cube1.rotationY+=90;
-				if (cube1.rotationY>360)
-					cube1.rotationY=90;
-
-				//matrices
-				rotateCube = glm::rotate((float)(90*M_PI/180.0f), glm::vec3(1,0,0));
-				translateInY=cuboid_lengthZ;
-				translateCubeEdge = glm::translate(glm::vec3(0.0,0.0,cube1.height));
-				translateCube1EdgeR = glm::translate(glm::vec3(0.0,translateInY,-1*cube1.height));
-				rotationOverallCube = translateCube1EdgeR * rotateCube * translateCubeEdge * rotationOverallCube;
-				//interchange cuboid z x lenghts
-				temp=cuboid_lengthZ;
-				cuboid_lengthZ=cuboid_lengthY;
-				cuboid_lengthY=temp;
-				//position cube1
-				cube1.y-=cuboid_lengthY;
-				check_cube_fall();
+				direction=4;
+				break;
+			case GLFW_KEY_A:
+				direction = -1;
+				gotox = cube1.x - 0.5f;
+				rotateslow(window);
+				break;
+			case GLFW_KEY_D:
+				direction = -2;
+					gotox = cube1.x + 0.5f;
+				rotateslow(window);
+				break;
+			case GLFW_KEY_W:
+				direction= -3;
+				gotoy = cube1.y + 0.5f;
+				rotateslow(window);
+				break;
+			case GLFW_KEY_X:
+				direction = -4;
+				gotoy = cube1.y - 0.5f;
+				rotateslow(window);
 				break;
 			default:
 				break;
@@ -415,14 +368,26 @@ void keyboardChar (GLFWwindow* window, unsigned int key)
 /* Executed when a mouse button is pressed/released */
 void mouseButton (GLFWwindow* window, int button, int action, int mods)
 {
-	switch (button) {
+
+	switch (button) 
+	{
 		case GLFW_MOUSE_BUTTON_RIGHT:
-			if (action == GLFW_RELEASE) {
+			if (action == GLFW_RELEASE) 
+			{
 				rectangle_rot_dir *= -1;
+			}
+			break;
+		case GLFW_MOUSE_BUTTON_LEFT:
+			{
+				if (action == GLFW_RELEASE) 
+				{	direction = 5;
+					rotateslow(window);
+				}
 			}
 			break;
 		default:
 			break;
+
 	}
 }
 
@@ -489,29 +454,7 @@ void createRectangleScore (string name, int tone, COLOR colorA, COLOR colorB, CO
 	if(component=="score")
 		TEXT[name] = vishsprite;
 }
-VAO* createStar ()
-{
-	static const GLfloat vertex_buffer_data [] = {
-		0,-0.2,0, // vertex 1
-		-0.2,0.0,0, // vertex 2
-		0, 0.2,0, // vertex 3
 
-		0, 0.2,0, // vertex 3
-		0.2, 0.0,0, // vertex 4
-		0.,-0.2,0  // vertex 1
-	};
-
-	static const GLfloat color_buffer_data [] = {
-		255.0f/255.0f, 153.0f/255.0f, 0.0f/255.0f, // color 1
-		255.0f/255.0f, 153.0f/255.0f, 0.0f/255.0f, // color 2
-		255.0f/255.0f, 153.0f/255.0f, 0.0f/255.0f, // color 4
-
-		255.0f/255.0f, 153.0f/255.0f, 0.0f/255.0f, // color 1
-		255.0f/255.0f, 153.0f/255.0f, 0.0f/255.0f, // color 2
-		255.0f/255.0f, 153.0f/255.0f, 0.0f/255.0f
-	};
-	return create3DObject(GL_TRIANGLES, 6, vertex_buffer_data, color_buffer_data, GL_FILL);
-}
 
 void setStroke(char val){
 	TEXT["top"].status=0;
@@ -548,30 +491,6 @@ void setStroke(char val){
 
 }
 
-
-VAO *createBrick (int random_number)
-{
-
-	static const GLfloat vertex_buffer_star [] = {
-		0,0.1,0, // vertex 1
-		-0.15,-0.15,0, // vertex 2
-		0.15, -0.15,0, // vertex 3
-
-		-0.15, 0.0,0, // vertex 3
-		0.15, 0.0,0, // vertex 4
-		0.0,-0.25,0  // vertex 1
-	};
-	static const GLfloat color4_buffer_data [] = {
-		1,0,102.0f/255.0f, // color 1
-		1,0,102.0f/255.0f, // color 2
-		1,0,102.0f/255.0f, // color 3
-
-		1,0,102.0f/255.0f, // color 3
-		1,0,102.0f/255.0f, // color 4
-		1,0,102.0f/255.0f  // color 1
-	};
-	return create3DObject(GL_TRIANGLES, 6, vertex_buffer_star, color4_buffer_data, GL_FILL);
-}
 
 // Creates the rectangle object used in this sample code
 void createRectangle ()
@@ -735,11 +654,13 @@ void createRectangle ()
 	// create3DObject creates and returns a handle to a VAO that can be used later
 	count=0;
 	values();
+
 	//	printf("count:%d\n",count);
 	for(i=0;i<=10;i++)
 	{
 		for(j=0;j<=10;j++)
 		{
+			//	printf("%d %d %d\n",i,j,x[i][j][var]);
 			//printf("var:%d\n",var);
 			//		printf("%d %d\n",i,j);
 			if(x[i][j][var]==1)
@@ -855,25 +776,67 @@ void createbridge ()
 
 	// create3DObject creates and returns a handle to a VAO that can be used later
 	values();
-	//	printf("count:%d\n",count);
+	//	printf("count:%d\n",count);   
 	for(i=0;i<=10;i++)
 	{
 		for(j=0;j<=10;j++)
 		{
 			//printf("var:%d\n",var);
 			//		printf("%d %d\n",i,j);
-			if(x[i][j][var]==4)
+			if(bridgeflag3==1)
 			{
-				x[i][j][var]=1;
-				count++;
-				brickpos[count].x1 = boardx + w*(i);
-				brickpos[count].y1 = boardy + w*(j);
-				brickpos[count].z1 = 0;
-				brickpos[count].mybrick = create3DObject(GL_TRIANGLES, 12*3, vertex_buffer_data, color_buffer_data, GL_FILL);
+				if(x[i][j][var]==4)
+				{
+					x[i][j][var]=1;
+					count++;
+					brickpos[count].x1 = boardx + w*(i);
+					brickpos[count].y1 = boardy + w*(j);
+					brickpos[count].z1 = 0;
+					brickpos[count].mybrick = create3DObject(GL_TRIANGLES, 12*3, vertex_buffer_data, color_buffer_data, GL_FILL);
+				}
+
 			}
+			if(bridgeflag5==1)
+			{
+				if(x[i][j][var]==6)
+				{
+					x[i][j][var]=1;
+					count++;
+					brickpos[count].x1 = boardx + w*(i);
+					brickpos[count].y1 = boardy + w*(j);
+					brickpos[count].z1 = 0;
+					brickpos[count].mybrick = create3DObject(GL_TRIANGLES, 12*3, vertex_buffer_data, color_buffer_data, GL_FILL);
+				}
+
+			}
+
+
 		}
 	}
 	//printf("count:%d\n",count);
+}
+VAO* createStar ()
+{
+	static const GLfloat vertex_buffer_data [] = {
+		0,-0.2,0, // vertex 1
+		-0.2,0.0,0, // vertex 2
+		0, 0.2,0, // vertex 3
+
+		0, 0.2,0, // vertex 3
+		0.2, 0.0,0, // vertex 4
+		0.,-0.2,0  // vertex 1
+	};
+
+	static const GLfloat color_buffer_data [] = {
+		255.0f/255.0f, 153.0f/255.0f, 0.0f/255.0f, // color 1
+		255.0f/255.0f, 153.0f/255.0f, 0.0f/255.0f, // color 2
+		255.0f/255.0f, 153.0f/255.0f, 0.0f/255.0f, // color 4
+
+		255.0f/255.0f, 153.0f/255.0f, 0.0f/255.0f, // color 1
+		255.0f/255.0f, 153.0f/255.0f, 0.0f/255.0f, // color 2
+		255.0f/255.0f, 153.0f/255.0f, 0.0f/255.0f
+	};
+	return create3DObject(GL_TRIANGLES, 6, vertex_buffer_data, color_buffer_data, GL_FILL);
 }
 
 VAO* createCube (cubeS* curr_cube)
@@ -1081,6 +1044,9 @@ void draw (GLFWwindow* window, float x, float y, float w, float h, int doM, int 
 
 	// draw3DObject draws the VAO given to it using current MVP matrix
 	draw3DObject(cube2.object);
+	/* 7 SEGMENT FOR MOVES*/
+	rotateslow(window);
+
 	int k;
 	for(k=1;k<=4;k++)
 	{
@@ -1133,7 +1099,43 @@ void draw (GLFWwindow* window, float x, float y, float w, float h, int doM, int 
 			}
 		}
 	}
+	/* 7 SEGMENT FOR MOVES*/
+	/* 7 SEGMENT FOR LEVEL*/
+	for(k=1;k<=1;k++)
+	{
+		float translation;
+		float translation1=2.7f;
+		if(k==1)
+		{
+			int temp=var;
+			setStroke(temp+'0');
+			translation=-3.7f;
+		}
 
+		for(map<string,Structure>::iterator it=TEXT.begin();it!=TEXT.end();it++){
+			string current = it->first; 
+			if(TEXT[current].status==1)
+			{
+				//    cout << "1" << endl;
+				glm::mat4 MVP;  // MVP = Projection * View * Model
+
+				Matrices.model = glm::mat4(1.0f);
+
+
+				glm::mat4 ObjectTransform;
+				glm::mat4 translateObject = glm::translate (glm::vec3(TEXT[current].x+translation,TEXT[current].y+translation1  ,0.0f)); // glTranslatef
+				// glm::mat4 rotateTriangle = glm::rotate((float)((TEXT[current].curr_angle)*M_PI/180.0f), glm::vec3(0,0,1));  // rotate about vector (1,0,0)
+				ObjectTransform=translateObject;
+				Matrices.model *= ObjectTransform;
+				MVP = VP * Matrices.model; // MVP = p * V * M
+
+				glUniformMatrix4fv(Matrices.MatrixID, 1, GL_FALSE, &MVP[0][0]);
+				draw3DObject(TEXT[current].object);
+			}
+		}
+	}
+
+	/* 7 SEGMENT FOR LEVEL*/
 }
 
 /* Initialise glfw window, I/O callbacks and the renderer to use */
@@ -1182,7 +1184,7 @@ void initGL (GLFWwindow* window, int width, int height)
 	{
 		stararr[i].star = createStar();
 	}
-	stararr[1].X =-3.7f ; stararr[1].Y=3.7f ; stararr[1].key = 0.; 
+	stararr[1].X =-3.7f ; stararr[1].Y=3.7f ; stararr[1].key = 0; 
 	stararr[2].X =-3.3f ; stararr[2].Y=3.7f ; stararr[2].key = 0; 
 	stararr[0].X =-2.9f ; stararr[0].Y=3.7f ; stararr[0].key = 0;
 	// createFloor();
@@ -1216,7 +1218,195 @@ void initGL (GLFWwindow* window, int width, int height)
 	// cout << "GLSL: " << glGetString(GL_SHADING_LANGUAGE_VERSION) << endl;
 }
 
+void rotateslow(GLFWwindow* window)
+{
+	float temp,translateInX,translateInY;
+	//rotate right
+	if(fallen)
+	{
+		cube1.z -= 0.25f;
+		if(cube1.z < -5.0f)
+		{
+			fallen=0;
+			initialise_all();
+		}
+	}
+	if(direction==1)
+	{
+		cube1.rotationX+=10;
+		//matrices
+		rotateCube = glm::rotate((float)(10*M_PI/180.0f), glm::vec3(0,1,0));
+		translateInX=cuboid_lengthX;
+		translateCubeEdge = glm::translate(glm::vec3(-1*(translateInX),0.0,cube1.height));
+		if(cube1.rotationX==90)
+			translateCube1EdgeR = glm::translate(glm::vec3(0.0,0.0,-1*cube1.height));
+		else
+			translateCube1EdgeR = glm::translate(glm::vec3((translateInX),0.0,-1*cube1.height));
+		rotationOverallCube = translateCube1EdgeR * rotateCube * translateCubeEdge * rotationOverallCube;
 
+		if (cube1.rotationX>=90)
+		{
+			cube1.rotationX=0;
+			direction=0;
+			cube1.x+=cuboid_lengthX;
+			//interchange cuboid z x lenghts
+			temp=cuboid_lengthZ;
+			cuboid_lengthZ=cuboid_lengthX;
+			cuboid_lengthX=temp;
+			check_cube_fall();
+		}
+	}
+	//rotate left
+	else if(direction==2)
+	{
+		cube1.rotationX-=10;
+		//Matrices
+		rotateCube = glm::rotate((float)(-10*M_PI/180.0f), glm::vec3(0,1,0));
+		translateInX=cuboid_lengthZ;
+		translateCubeEdge = glm::translate(glm::vec3(0.0,0.0,cube1.height));
+		if(cube1.rotationX==-90)
+			translateCube1EdgeR = glm::translate(glm::vec3(cuboid_lengthZ,0.0,-1*cube1.height));
+		else
+			translateCube1EdgeR = glm::translate(glm::vec3(0.0,0.0,-1*cube1.height));
+		rotationOverallCube = translateCube1EdgeR * rotateCube * translateCubeEdge * rotationOverallCube;
+
+		if(cube1.rotationX<=-90)
+		{
+			cube1.rotationX=0;
+			direction=0;
+			//interchange cuboid z x lenghts
+			temp=cuboid_lengthZ;
+			cuboid_lengthZ=cuboid_lengthX;
+			cuboid_lengthX=temp;
+
+			//position cube1
+			cube1.x-=cuboid_lengthX;
+			//position cube2
+
+			//if(cube1.rotationX)
+			check_cube_fall();
+
+		}
+
+	}
+
+	//rotate up
+	else if(direction==3)
+	{
+		cube1.rotationY-=10;
+		//matrices
+		rotateCube = glm::rotate((float)(-10*M_PI/180.0f), glm::vec3(1,0,0));
+		translateInY=cuboid_lengthY;
+		translateCubeEdge = glm::translate(glm::vec3(0.0,-1*(translateInY),cube1.height));
+		if(cube1.rotationY==-90)
+			translateCube1EdgeR = glm::translate(glm::vec3(0.0,0.0,-1*cube1.height));
+		else
+			translateCube1EdgeR = glm::translate(glm::vec3(0.0,translateInY,-1*cube1.height));
+		rotationOverallCube = translateCube1EdgeR * rotateCube * translateCubeEdge * rotationOverallCube;
+
+		if (cube1.rotationY<=-90)
+		{
+			cube1.rotationY=0;
+			direction=0;
+			cube1.y+=cuboid_lengthY;
+
+			//interchange cuboid z x lenghts
+			temp=cuboid_lengthZ;
+			cuboid_lengthZ=cuboid_lengthY;
+			cuboid_lengthY=temp;
+			check_cube_fall();
+		}
+
+	}
+
+	//rotate Down
+	else if(direction==4)
+	{
+		cube1.rotationY+=10;
+		//matrices
+		rotateCube = glm::rotate((float)(10*M_PI/180.0f), glm::vec3(1,0,0));
+		translateInY=cuboid_lengthZ;
+		translateCubeEdge = glm::translate(glm::vec3(0.0,0.0,cube1.height));
+		if(cube1.rotationY==90)
+			translateCube1EdgeR = glm::translate(glm::vec3(0.0,translateInY,-1*cube1.height));
+		else
+			translateCube1EdgeR = glm::translate(glm::vec3(0.0,0.0,-1*cube1.height));
+		rotationOverallCube = translateCube1EdgeR * rotateCube * translateCubeEdge * rotationOverallCube;
+
+		if(cube1.rotationY>=90)
+		{
+			cube1.rotationY=0;
+			direction=0;
+			temp=cuboid_lengthZ;
+			cuboid_lengthZ=cuboid_lengthY;
+			cuboid_lengthY=temp;
+			//position cube1
+			cube1.y-=cuboid_lengthY;
+			check_cube_fall();
+
+		}
+
+	}
+	else if(direction==5)
+	{
+		glfwGetCursorPos(window, &mouse_pos_x, &mouse_pos_y);
+		mouse_pos_x = mouse_pos_x*10.0f/600.0f -5.2f;
+		mouse_pos_y = -1*(mouse_pos_y*10.0f/600.0f - 4.5f);
+		//	printf("mouse:%f %f\n",(mouse_pos_x),(mouse_pos_y));
+		int a = mouse_pos_x/0.5;
+		int b = mouse_pos_y/0.5;
+		float finalx = a*0.5;
+		float finaly = b*0.5;
+		//		printf("%d %d\n",a,b);
+		//		printf("%f %f\n",finalx,finaly);
+		if(cube1.x < finalx)
+			cube1.x += jump;
+		else if(cube1.x > finalx)
+			cube1.x -= jump;
+		if(cube1.y < finaly)
+			cube1.y += jump;
+		else if(cube1.y > finaly)
+			cube1.y -= jump;
+		//	cube1.x = finalx;
+		//	cube1.y = finaly;
+		if(cube1.x == finalx && cube1.y == finaly)
+			direction=0;
+		//	cube1.z=0.5f;
+		check_cube_fall();
+	}
+	else if(direction== -1)
+	{
+		if(cube1.x > gotox)
+			cube1.x -= jump;
+		if(cube1.x == gotox)
+			direction=0;
+		check_cube_fall();
+	}
+	else if(direction==-2)
+	{
+		if(cube1.x < gotox)
+			cube1.x += jump;
+		if(cube1.x == gotox)
+			direction=0;
+		check_cube_fall();
+	}
+	else if(direction==-3)
+	{
+		if(cube1.y < gotoy)
+			cube1.y += jump;
+		if(cube1.y == gotoy)
+			direction=0;
+		check_cube_fall();
+	}
+	else if(direction==-4)
+	{
+		if(cube1.y > gotoy)
+			cube1.y -= jump;
+		if(cube1.y == gotoy)
+			direction=0;
+		check_cube_fall();
+	}
+}
 void check_cube_fall()
 {	
 	//printf("%f %f\n",cube1.x,cube1.y);
@@ -1226,11 +1416,11 @@ void check_cube_fall()
 	if(xx<0 || yy<0)
 	{
 		stararr[countstar].key=1;
-		initialise_all();
+		fallen=1;
 	}
 	/** HOLE **/
 	else
-	{ //GOAL HOLE
+	{ //GOAL hole
 		if(x[xx][yy][var]==2) // left/below ka part is in hole
 		{
 			//printf("hi\n");
@@ -1251,7 +1441,7 @@ void check_cube_fall()
 		}
 		/** HOLE **/
 		/* OUTSIDE BOUNDARY */
-		else if(x[xx][yy][var]==0 || x[xx][yy][var]==4) // left/below ka part is outside
+		else if(x[xx][yy][var]==0 || x[xx][yy][var]==4 ||  x[xx][yy][var]==6) // left/below ka part is outside
 		{
 			if(cuboid_lengthX== w*2) //left part is outside
 			{
@@ -1259,7 +1449,7 @@ void check_cube_fall()
 				{
 					stararr[countstar].key=1;
 					countstar--;
-					initialise_all();
+					fallen=1;
 				}
 			}
 
@@ -1269,7 +1459,7 @@ void check_cube_fall()
 				{
 					stararr[countstar].key=1;
 					countstar--;
-					initialise_all();
+					fallen=1;
 				}
 			}
 			else if(cuboid_lengthZ==w*2)
@@ -1277,27 +1467,42 @@ void check_cube_fall()
 				{
 					stararr[countstar].key=1;
 					countstar--;
-					initialise_all();
+					fallen=1;
 				}	
 			}
 		}
 		/* OUTSIDE BOUNDARY */
 		/* BRIDGE */
-		else if(x[xx][yy][var]==3 ||x[xx][yy][var]==5) // left/below ka part is in hole
+		else if(x[xx][yy][var]==5)
 		{
+			if(cuboid_lengthZ == w*2)
+			{
+				bridgeflag5=1;
+				createbridge();
+			}
+		}
+		else if(x[xx][yy][var]==3) // left/below ka part is on special brick
+		{
+			bridgeflag3=1;
 			createbridge();
 		}
 		else if(x[xx][yy][var]==1) // left/below ka part is in hole
 		{
 			if(cuboid_lengthX== w*2) //left part in hole
 			{
-				if(x[xx+1][yy][var]==5)
+				if(x[xx+1][yy][var]==3)
+				{
+					bridgeflag3=1;
 					createbridge();
+				}
 			}
 			else if(cuboid_lengthY==w*2)
 			{
-				if(x[xx][yy+1][var]==5)
+				if(x[xx][yy+1][var]==3)
+				{
+					bridgeflag3=1;
 					createbridge();
+				}
 			}
 		}
 		/* BRIDGE */
@@ -1306,7 +1511,6 @@ void check_cube_fall()
 
 void level_up()
 {
-	printf("congo\n");
 	score=0;
 	var++;
 	//printf("var:%d\n",var);
@@ -1320,6 +1524,7 @@ void initialise_all()
 {
 	cube1.x=block1X;
 	cube1.y=block1Y;
+	cube1.z=0.5f;
 	cube1.width=w;
 	cube1.height=w;
 	cube1.z=block1Z+cube1.height;
