@@ -12,6 +12,65 @@
 #include <glm/gtc/matrix_transform.hpp> 
 using namespace std;
 
+#include <ao/ao.h>
+#include <mpg123.h>
+#define BITS 8
+
+
+mpg123_handle *mh;
+unsigned char *buffer;
+size_t buffer_size;
+size_t done;
+int err;
+
+int driver;
+ao_device *dev;
+
+ao_sample_format format;
+int channels, encoding;
+long rate;
+
+
+void audio_init() {
+    /* initializations */
+    ao_initialize();
+    driver = ao_default_driver_id();
+    mpg123_init();
+    mh = mpg123_new(NULL, &err);
+    buffer_size= 3000;
+    buffer = (unsigned char*) malloc(buffer_size * sizeof(unsigned char));
+
+    /* open the file and get the decoding format */
+    mpg123_open(mh, "./breakout.mp3");
+    mpg123_getformat(mh, &rate, &channels, &encoding);
+
+    /* set the output format and open the output device */
+    format.bits = mpg123_encsize(encoding) * BITS;
+    format.rate = rate;
+    format.channels = channels;
+    format.byte_format = AO_FMT_NATIVE;
+    format.matrix = 0;
+    dev = ao_open_live(driver, &format, NULL);
+}
+
+
+void audio_play() {
+    /* decode and play */
+    if (mpg123_read(mh, buffer, buffer_size, &done) == MPG123_OK)
+        ao_play(dev, (char*) buffer, done);
+    else mpg123_seek(mh, 0, SEEK_SET);
+}
+
+void audio_close() {
+    /* clean up */
+    free(buffer);
+    ao_close(dev);
+    mpg123_close(mh);
+    mpg123_delete(mh);
+    mpg123_exit();
+    ao_shutdown();
+}
+
 /* Structures */
 typedef struct VAO {
 	GLuint VertexArrayID;
@@ -52,14 +111,20 @@ typedef struct brick_ts {
 	float x1;
 	float y1;
 	float z1;
+	int typebridge;
 	VAO * mybrick;
 }brick;
 struct GLMatrices {
 	glm::mat4 projection;
+	glm::mat4 projectionP;
+	glm::mat4 projectionO;
 	glm::mat4 model;
 	glm::mat4 view;
 	GLuint MatrixID;
 } Matrices;
+typedef struct cameraI {
+    float Ex,Ey,Ez,Tx,Ty,Tz;
+}cameraI;
 /* Structures */
 
 
@@ -76,7 +141,7 @@ void rotateslow(GLFWwindow* window);
 
 /*Initialisations */
 int x[200][200][200] = {1};
-int score=0,i,j=0,count=0,var=1,countstar=2,direction=0,fallen=0,bridgeflag3=0,bridgeflag5=0;
+int score=0,i,j=0,count=0,var=1,countstar=2,direction=0,fallen=0,bridgeflag3=0,bridgeflag5=0,viewT=1,proj_type=1;
 float w=0.5f,h=0.25f,w2 = 0.5f, h2=0.5f,temp,jump=0.0625f,gotox,gotoy;
 float camera_rotation_angle = 90 , block_rotation_angle = 90;
 float boardx = -4.5f,boardy = -4.5f;
@@ -97,6 +162,8 @@ GLuint programID;
 double last_update_time, current_time;
 glm::vec3 rect_pos, floor_pos;
 float rectangle_rotation = 0;
+cameraI camV;
+bool mouse_right_pressed = false;
 /*Initialisations */
 
 /* Function to load Shaders - Use it as it is */
@@ -325,22 +392,22 @@ void keyboard (GLFWwindow* window, int key, int scancode, int action, int mods)
 				break;
 			case GLFW_KEY_A:
 				direction = -1;
-				gotox = cube1.x - 0.5f;
+				gotox = cube1.x - 1.0f;
 				rotateslow(window);
 				break;
 			case GLFW_KEY_D:
 				direction = -2;
-					gotox = cube1.x + 0.5f;
+				gotox = cube1.x + 1.0f;
 				rotateslow(window);
 				break;
 			case GLFW_KEY_W:
 				direction= -3;
-				gotoy = cube1.y + 0.5f;
+				gotoy = cube1.y + 1.0f;
 				rotateslow(window);
 				break;
 			case GLFW_KEY_X:
 				direction = -4;
-				gotoy = cube1.y - 0.5f;
+				gotoy = cube1.y - 1.0f;
 				rotateslow(window);
 				break;
 			default:
@@ -353,12 +420,40 @@ void keyboard (GLFWwindow* window, int key, int scancode, int action, int mods)
 void keyboardChar (GLFWwindow* window, unsigned int key)
 {
 	switch (key) {
+		case 'b':
+		case 'B':
+			//block view
+			viewT=2;
+			break;
+		case 'n':
+		case 'N':
+			//normal view
+			viewT=1;
+			break;
+		case 'o':
+		case 'O':
+			//top down
+			viewT=3;
+			break;
+		case 'p':
+		case 'P':
+			//tower
+			viewT=4;
+			break;
+		case 'f':
+		case'F':
+			//follow cam
+			viewT=5;
+			break;
 		case 'Q':
 		case 'q':
 			quit(window);
 			break;
 		case ' ':
 			do_rot ^= 1;
+			break;
+		case 't':
+			proj_type ^= 1 ;
 			break;
 		default:
 			break;
@@ -406,10 +501,10 @@ void reshapeWindow (GLFWwindow* window, int width, int height)
 
 	// Store the projection matrix in a variable for future use
 	// Perspective projection for 3D views
-	Matrices.projection = glm::perspective(fov, (GLfloat) fbwidth / (GLfloat) fbheight, 0.1f, 500.0f);
+	Matrices.projectionP = glm::perspective(fov, (GLfloat) fbwidth / (GLfloat) fbheight, 0.1f, 500.0f);
 
 	// Ortho projection for 2D views
-	//Matrices.projection = glm::ortho(-4.0f, 4.0f, -4.0f, 4.0f, 0.1f, 500.0f);
+	Matrices.projectionO = glm::ortho(-5.0f, 5.0f, -5.0f, 5.0f, 0.0f, 500.0f);
 }
 
 VAO *rectangle, *cam, *floor_vao , *myblock;
@@ -651,6 +746,44 @@ void createRectangle ()
 		0.0f, 0.0f, 1.0f,
 		0.0f, 0.0f, 1.0f,
 	};
+	static const GLfloat color_buffer_data4 [] = {
+		1.0f, 69.0f/255.0f, 0.0f,
+		1.0f, 69.0f/255.0f, 0.0f,
+		1.0f, 69.0f/255.0f, 0.0f,
+		1.0f, 69.0f/255.0f, 0.0f,
+		1.0f, 69.0f/255.0f, 0.0f,
+		1.0f, 69.0f/255.0f, 0.0f,
+		1.0f, 0.0f, 1.0f,
+		1.0f, 0.0f, 1.0f,
+		1.0f, 0.0f, 1.0f,
+		1.0f, 0.0f, 1.0f,
+		1.0f, 0.0f, 1.0f,
+		1.0f, 0.0f, 1.0f,
+		0.0f, 1.0f, 1.0f,
+		0.0f, 1.0f, 1.0f,
+		0.0f, 1.0f, 1.0f,
+		0.0f, 1.0f, 1.0f,
+		0.0f, 1.0f, 1.0f,
+		0.0f, 1.0f, 1.0f,
+		1.0f, 0.0f, 0.0f,
+		1.0f, 0.0f, 0.0f,
+		1.0f, 0.0f, 0.0f,
+		1.0f, 0.0f, 0.0f,
+		1.0f, 0.0f, 0.0f,
+		1.0f, 0.0f, 0.0f,
+		0.0f, 1.0f, 0.0f,   
+		0.0f, 1.0f, 0.0f,   
+		0.0f, 1.0f, 0.0f,   
+		0.0f, 1.0f, 0.0f,   
+		0.0f, 1.0f, 0.0f,   
+		0.0f, 1.0f, 0.0f,   
+		0.0f, 0.0f, 1.0f,
+		0.0f, 0.0f, 1.0f,
+		0.0f, 0.0f, 1.0f,
+		0.0f, 0.0f, 1.0f,
+		0.0f, 0.0f, 1.0f,
+		0.0f, 0.0f, 1.0f,
+	};
 	// create3DObject creates and returns a handle to a VAO that can be used later
 	count=0;
 	values();
@@ -669,7 +802,17 @@ void createRectangle ()
 				brickpos[count].x1 = boardx + w*(i);
 				brickpos[count].y1 = boardy + w*(j);
 				brickpos[count].z1 = 0;
+				brickpos[count].typebridge = x[i][j][var];
 				brickpos[count].mybrick = create3DObject(GL_TRIANGLES, 12*3, vertex_buffer_data, color_buffer_data, GL_FILL);
+			}
+			if(x[i][j][var]==4 || x[i][j][var]==6)
+			{
+				count++;
+				brickpos[count].x1 = boardx + w*(i);
+				brickpos[count].y1 = boardy + w*(j);
+				brickpos[count].z1 = 0;
+				brickpos[count].typebridge = x[i][j][var];
+				brickpos[count].mybrick = create3DObject(GL_TRIANGLES, 12*3, vertex_buffer_data, color_buffer_data4, GL_FILL);
 			}
 			else if(x[i][j][var]==3)
 			{
@@ -677,6 +820,7 @@ void createRectangle ()
 				brickpos[count].x1 = boardx + w*(i);
 				brickpos[count].y1 = boardy + w*(j);
 				brickpos[count].z1 = 0;
+				brickpos[count].typebridge = x[i][j][var];
 				brickpos[count].mybrick = create3DObject(GL_TRIANGLES, 12*3, vertex_buffer_data, color_buffer_data2, GL_FILL);
 			}
 			else if(x[i][j][var]==5)
@@ -685,6 +829,7 @@ void createRectangle ()
 				brickpos[count].x1 = boardx + w*(i);
 				brickpos[count].y1 = boardy + w*(j);
 				brickpos[count].z1 = 0;
+				brickpos[count].typebridge = x[i][j][var];
 				brickpos[count].mybrick = create3DObject(GL_TRIANGLES, 12*3, vertex_buffer_data, color_buffer_data3, GL_FILL);
 			}
 		}
@@ -692,129 +837,7 @@ void createRectangle ()
 	//printf("count:%d\n",count);
 }
 
-void createbridge ()
-{
-	float wt=w-0.01;
-	// GL3 accepts only Triangles. Quads are not supported
-	static const GLfloat vertex_buffer_data [] = {
-		0.0, wt, 0.0, //1
-		0.0, 0.0, 0.0, //2
-		wt, 0.0, 0.0,  //3
-		0.0, wt, 0.0, //1
-		wt, 0.0, 0.0,  //3
-		wt, wt, 0.0,  //4
-		wt, wt, 0.0,  //4
-		wt, 0.0, 0.0,  //3
-		wt, 0.0, -1*h,  //5
-		wt, wt, 0.0,  //4
-		wt, 0.0, -1*h,  //5
-		wt, wt, -1.0*h,  //6
-		wt, wt, -1.0*h,  //6
-		wt, 0.0, -1*h,  //5
-		0.0, 0.0, -1*h,  //7
-		wt, wt, -1.0*h,  //6
-		0.0, 0.0, -1*h,  //7
-		0.0, wt, -1*h,  //8
-		0.0, wt, -1*h,  //8
-		0.0, 0.0, -1*h,  //7
-		0.0, 0.0, 0.0, //2
-		0.0, wt, -1*h,  //8
-		0.0, 0.0, 0.0, //2
-		0.0, wt, 0.0, //1
-		0.0, wt, -1*h,  //8
-		0.0, wt, 0.0, //1
-		wt, wt, 0.0,  //4
-		0.0, wt, -1*h,  //8
-		wt, wt, 0.0,  //4
-		wt, wt, -1.0*h,  //6
-		0.0, 0.0, 0.0, //2
-		0.0, 0.0, -1*h,  //7
-		wt, 0.0, -1*h,  //5
-		0.0, 0.0, 0.0, //2
-		wt, 0.0, -1*h,  //5
-		wt, 0.0, 0.0,  //3
-	};
 
-	static const GLfloat color_buffer_data [] = {
-		0.0f, 0.0f, 0.0f,
-		0.0f, 0.0f, 0.0f,
-		0.0f, 0.0f, 0.0f,
-		0.0f, 0.0f, 0.0f,
-		0.0f, 0.0f, 0.0f,
-		0.0f, 0.0f, 0.0f,
-		1.0f, 0.0f, 1.0f,
-		1.0f, 0.0f, 1.0f,
-		1.0f, 0.0f, 1.0f,
-		1.0f, 0.0f, 1.0f,
-		1.0f, 0.0f, 1.0f,
-		1.0f, 0.0f, 1.0f,
-		0.0f, 1.0f, 1.0f,
-		0.0f, 1.0f, 1.0f,
-		0.0f, 1.0f, 1.0f,
-		0.0f, 1.0f, 1.0f,
-		0.0f, 1.0f, 1.0f,
-		0.0f, 1.0f, 1.0f,
-		1.0f, 0.0f, 0.0f,
-		1.0f, 0.0f, 0.0f,
-		1.0f, 0.0f, 0.0f,
-		1.0f, 0.0f, 0.0f,
-		1.0f, 0.0f, 0.0f,
-		1.0f, 0.0f, 0.0f,
-		0.0f, 1.0f, 0.0f,   
-		0.0f, 1.0f, 0.0f,   
-		0.0f, 1.0f, 0.0f,   
-		0.0f, 1.0f, 0.0f,   
-		0.0f, 1.0f, 0.0f,   
-		0.0f, 1.0f, 0.0f,   
-		0.0f, 0.0f, 1.0f,
-		0.0f, 0.0f, 1.0f,
-		0.0f, 0.0f, 1.0f,
-		0.0f, 0.0f, 1.0f,
-		0.0f, 0.0f, 1.0f,
-		0.0f, 0.0f, 1.0f,
-	};
-
-	// create3DObject creates and returns a handle to a VAO that can be used later
-	values();
-	//	printf("count:%d\n",count);   
-	for(i=0;i<=10;i++)
-	{
-		for(j=0;j<=10;j++)
-		{
-			//printf("var:%d\n",var);
-			//		printf("%d %d\n",i,j);
-			if(bridgeflag3==1)
-			{
-				if(x[i][j][var]==4)
-				{
-					x[i][j][var]=1;
-					count++;
-					brickpos[count].x1 = boardx + w*(i);
-					brickpos[count].y1 = boardy + w*(j);
-					brickpos[count].z1 = 0;
-					brickpos[count].mybrick = create3DObject(GL_TRIANGLES, 12*3, vertex_buffer_data, color_buffer_data, GL_FILL);
-				}
-
-			}
-			if(bridgeflag5==1)
-			{
-				if(x[i][j][var]==6)
-				{
-					x[i][j][var]=1;
-					count++;
-					brickpos[count].x1 = boardx + w*(i);
-					brickpos[count].y1 = boardy + w*(j);
-					brickpos[count].z1 = 0;
-					brickpos[count].mybrick = create3DObject(GL_TRIANGLES, 12*3, vertex_buffer_data, color_buffer_data, GL_FILL);
-				}
-
-			}
-
-
-		}
-	}
-	//printf("count:%d\n",count);
-}
 VAO* createStar ()
 {
 	static const GLfloat vertex_buffer_data [] = {
@@ -933,6 +956,83 @@ VAO* createCube (cubeS* curr_cube)
 
 /* Render the scene with openGL */
 /* Edit this function according to your assignment */
+
+double mx,my;
+void getView(GLFWwindow* window)
+{
+    //normal view
+    if(viewT==1)
+    {
+        camV.Ex=5*cos(camera_rotation_angle*M_PI/180.0f);
+        camV.Ey=0;
+        camV.Ez=5*sin(camera_rotation_angle*M_PI/180.0f);
+        camV.Tx=0;
+        camV.Ty=0;
+        camV.Tz=0;
+    }
+    //block view
+    if(viewT==2)
+    {
+        camV.Ex=cube1.x+cuboid_lengthX;
+        camV.Ey=cube1.y+cuboid_lengthY;
+        camV.Ez=(cube1.z+cuboid_lengthZ);
+        camV.Tx=0;
+        camV.Ty=0;
+        camV.Tz=0;
+
+    }
+    //top down
+    if(viewT==3)
+    {
+        camV.Ex=0;
+        camV.Ey=0;
+        camV.Ez=5;
+        camV.Tx=0;
+        camV.Ty=0;
+        camV.Tz=0;
+
+    }
+    //tower
+    if(viewT==4)
+    {
+        camV.Ex=boardx;
+        camV.Ey=boardy;
+        camV.Ez=5;
+        camV.Tx=0;
+        camV.Ty=0;
+        camV.Tz=0;
+
+    }
+    //follow cam
+    if(viewT==5)
+    {
+        camV.Ex=cube1.x;
+        camV.Ey=cube1.y;
+        camV.Ez=3;
+        camV.Tx=0;
+        camV.Ty=0;
+        camV.Tz=0;
+
+    }
+    //helicopter
+    if(viewT==6)
+    {
+        if(mouse_right_pressed)
+        {
+            glfwGetCursorPos(window, &mx, &my);
+            mx=(mx-120)*0.5/30-3.0f;
+            my=(-1*my+481)*0.5/30-3.0f;
+        }
+        camV.Ex=mx;
+        camV.Ey=my;
+        //camV.Ez=3;
+        camV.Tx=0;
+        camV.Ty=0;
+        camV.Tz=0;
+
+    }
+}
+
 void draw (GLFWwindow* window, float x, float y, float w, float h, int doM, int doV, int doP)
 {
 	int fbwidth, fbheight;
@@ -945,32 +1045,40 @@ void draw (GLFWwindow* window, float x, float y, float w, float h, int doM, int 
 	glUseProgram(programID);
 
 	// Eye - Location of camera. Don't change unless you are sure!!
-	glm::vec3 eye (5*cos(camera_rotation_angle*M_PI/180.0f), 0, 5*sin(camera_rotation_angle*M_PI/180.0f)  );
-	glm:: vec3 eye2 (1,1,2);
 
-	// Target - Where is the camera looking at.  Don't change unless you are sure!!
-	glm::vec3 target (0, 0, 0);
-	// Up - Up vector defines tilt of camera.  Don't change unless you are sure!!
-	glm::vec3 up (0, 1, 0);
+	getView(window);
+
+    // Eye - Location of camera. Don't change unless you are sure!!
+    glm::vec3 eye (camV.Ex,camV.Ey,camV.Ez);
+    //glm::vec3 eye(1,2,2);
+    // Target - Where is the camera looking at.  Don't change unless you are sure!!
+    glm::vec3 target (camV.Tx,camV.Ty,camV.Tz);
+    // Up - Up vector defines tilt of camera.  Don't change unless you are sure!!
+    glm::vec3 up (0, 1, 0);
+	
+	glm:: vec3 eye2 (1,1,2);
 
 	// Compute Camera matrix (view)
 	if(doV)
 		Matrices.view = glm::lookAt(eye, target, up); // Fixed camera for 2D (ortho) in XY plane
 	else
 		Matrices.view = glm::mat4(1.0f);
+	glm::mat4 VP = (proj_type?Matrices.projectionP:Matrices.projectionO) * Matrices.view;
+	//glm::mat4 VP = Matrices.projectionO * Matrices.view;
+		// Compute ViewProject matrix as view/camera might not be changed for this frame (basic scenario)
 
-	// Compute ViewProject matrix as view/camera might not be changed for this frame (basic scenario)
-	glm::mat4 VP;
-	if (doP)
+	/*if (doP)
 		VP = Matrices.projection * Matrices.view;
 	else
 		VP = Matrices.view;
-	// Send our transformation to the currently bound shader, in the "MVP" uniform
+	*/// Send our transformation to the currently bound shader, in the "MVP" uniform
 	// For each model you render, since the MVP will be different (at least the M part)
 	glm::mat4 MVP;  // MVP = Projection * View * Model
 
 	// Load identity to model matrix
 	Matrices.model = glm::mat4(1.0f);
+
+	int j=0;
 
 	for(i=1;i<=count;i++)
 	{
@@ -989,24 +1097,19 @@ void draw (GLFWwindow* window, float x, float y, float w, float h, int doM, int 
 		glUniformMatrix4fv(Matrices.MatrixID, 1, GL_FALSE, &MVP[0][0]);
 
 		// draw3DObject draws the VAO given to it using current MVP matrix
-		draw3DObject(brickpos[i].mybrick);
+		if(brickpos[i].typebridge == 4)
+		{
+			if(bridgeflag3)
+				draw3DObject(brickpos[i].mybrick);
+		}
+		else if(brickpos[i].typebridge == 6)
+		{
+			if(bridgeflag5)
+				draw3DObject(brickpos[i].mybrick);
+		}
+		else
+			draw3DObject(brickpos[i].mybrick);
 	}
-	//	printf("done\n");
-	/******* Stars ************/
-	int j=0;
-	for(j=0;j<=2;j++)
-	{
-		Matrices.model = glm::mat4(1.0f);
-		glm::mat4 translateStar = glm::translate (glm::vec3(stararr[j].X, stararr[j].Y, 0));        // glTranslatef
-		//     glm::mat4 rotateMirror = glm::rotate((float)(mirarr[i].mirror_rotation*M_PI/180.0f), glm::vec3(0,0,1));
-		glm::mat4 StarTransform = translateStar ;
-		Matrices.model *= (StarTransform);
-		MVP = VP * Matrices.model;
-		glUniformMatrix4fv(Matrices.MatrixID, 1, GL_FALSE, &MVP[0][0]);
-		if(stararr[j].key==0)
-			draw3DObject(stararr[j].star);
-	}
-
 	/********* Stars ***********/
 	// Load identity to model matrix
 	/*Matrices.model = glm::mat4(1.0f);
@@ -1047,6 +1150,39 @@ void draw (GLFWwindow* window, float x, float y, float w, float h, int doM, int 
 	/* 7 SEGMENT FOR MOVES*/
 	rotateslow(window);
 
+	glm::vec3 eyeF (0,0,5);
+    //glm::vec3 eye(1,2,2);
+    // Target - Where is the camera looking at.  Don't change unless you are sure!!
+    glm::vec3 targetF (0,0,0);
+    // Up - Up vector defines tilt of camera.  Don't change unless you are sure!!
+    //glm::vec3 up (0, 1, 0);
+
+    // Compute Camera matrix (view)
+    if(doV)
+	Matrices.view = glm::lookAt(eyeF, targetF, up); // Fixed camera for 2D (ortho) in XY plane
+    else
+	Matrices.view = glm::mat4(1.0f);
+
+    // Compute ViewProject matrix as view/camera might not be changed for this frame (basic scenario)
+    //glm::mat4 VP;
+    //VP = (proj_type?Matrices.projectionP:Matrices.projectionO) * Matrices.view;
+    VP = Matrices.projectionP * Matrices.view;
+
+
+	//	printf("done\n");
+	/******* Stars ************/
+		for(j=0;j<=2;j++)
+	{
+		Matrices.model = glm::mat4(1.0f);
+		glm::mat4 translateStar = glm::translate (glm::vec3(stararr[j].X, stararr[j].Y, 0));        // glTranslatef
+		//     glm::mat4 rotateMirror = glm::rotate((float)(mirarr[i].mirror_rotation*M_PI/180.0f), glm::vec3(0,0,1));
+		glm::mat4 StarTransform = translateStar ;
+		Matrices.model *= (StarTransform);
+		MVP = VP * Matrices.model;
+		glUniformMatrix4fv(Matrices.MatrixID, 1, GL_FALSE, &MVP[0][0]);
+		if(stararr[j].key==0)
+			draw3DObject(stararr[j].star);
+	}
 	int k;
 	for(k=1;k<=4;k++)
 	{
@@ -1324,6 +1460,7 @@ void rotateslow(GLFWwindow* window)
 	{
 		cube1.rotationY+=10;
 		//matrices
+
 		rotateCube = glm::rotate((float)(10*M_PI/180.0f), glm::vec3(1,0,0));
 		translateInY=cuboid_lengthZ;
 		translateCubeEdge = glm::translate(glm::vec3(0.0,0.0,cube1.height));
@@ -1346,12 +1483,15 @@ void rotateslow(GLFWwindow* window)
 
 		}
 
+
 	}
 	else if(direction==5)
 	{
 		glfwGetCursorPos(window, &mouse_pos_x, &mouse_pos_y);
 		mouse_pos_x = mouse_pos_x*10.0f/600.0f -5.2f;
 		mouse_pos_y = -1*(mouse_pos_y*10.0f/600.0f - 4.5f);
+		if(fallen)
+			direction=0;
 		//	printf("mouse:%f %f\n",(mouse_pos_x),(mouse_pos_y));
 		int a = mouse_pos_x/0.5;
 		int b = mouse_pos_y/0.5;
@@ -1367,11 +1507,9 @@ void rotateslow(GLFWwindow* window)
 			cube1.y += jump;
 		else if(cube1.y > finaly)
 			cube1.y -= jump;
-		//	cube1.x = finalx;
-		//	cube1.y = finaly;
 		if(cube1.x == finalx && cube1.y == finaly)
 			direction=0;
-		//	cube1.z=0.5f;
+		
 		check_cube_fall();
 	}
 	else if(direction== -1)
@@ -1412,15 +1550,18 @@ void check_cube_fall()
 	//printf("%f %f\n",cube1.x,cube1.y);
 	int xx = (cube1.x-boardx)/w;
 	int yy = (cube1.y-boardy)/w;
-	//	printf("%d %d\n",xx,yy);
+	//printf("%d %d %d\n",xx,yy,var);
+	//printf("%d\n",x[xx][yy][var]);
 	if(xx<0 || yy<0)
 	{
 		stararr[countstar].key=1;
 		fallen=1;
+		direction=0;
 	}
-	/** HOLE **/
 	else
-	{ //GOAL hole
+	{
+/** HOLE **/
+	 //GOAL hole
 		if(x[xx][yy][var]==2) // left/below ka part is in hole
 		{
 			//printf("hi\n");
@@ -1450,6 +1591,7 @@ void check_cube_fall()
 					stararr[countstar].key=1;
 					countstar--;
 					fallen=1;
+					direction=0;
 				}
 			}
 
@@ -1460,6 +1602,7 @@ void check_cube_fall()
 					stararr[countstar].key=1;
 					countstar--;
 					fallen=1;
+					direction=0;
 				}
 			}
 			else if(cuboid_lengthZ==w*2)
@@ -1468,6 +1611,7 @@ void check_cube_fall()
 					stararr[countstar].key=1;
 					countstar--;
 					fallen=1;
+					direction=0;
 				}	
 			}
 		}
@@ -1475,16 +1619,25 @@ void check_cube_fall()
 		/* BRIDGE */
 		else if(x[xx][yy][var]==5)
 		{
+			//printf("heya\n");
 			if(cuboid_lengthZ == w*2)
 			{
-				bridgeflag5=1;
-				createbridge();
+				if(bridgeflag5==0)
+				{
+					bridgeflag5=1;
+				}
+				else
+					bridgeflag5=0;
 			}
 		}
 		else if(x[xx][yy][var]==3) // left/below ka part is on special brick
 		{
-			bridgeflag3=1;
-			createbridge();
+			if(bridgeflag3==0)
+			{
+				bridgeflag3=1;
+			}
+			else
+				bridgeflag3=0;
 		}
 		else if(x[xx][yy][var]==1) // left/below ka part is in hole
 		{
@@ -1492,16 +1645,24 @@ void check_cube_fall()
 			{
 				if(x[xx+1][yy][var]==3)
 				{
-					bridgeflag3=1;
-					createbridge();
+					if(bridgeflag3==0)
+					{	
+						bridgeflag3=1;
+					}
+					else
+						bridgeflag3=0;
 				}
 			}
 			else if(cuboid_lengthY==w*2)
 			{
 				if(x[xx][yy+1][var]==3)
 				{
-					bridgeflag3=1;
-					createbridge();
+					if(bridgeflag3==0)
+					{
+						bridgeflag3=1;
+					}
+					else
+						bridgeflag3=0;
 				}
 			}
 		}
@@ -1516,6 +1677,8 @@ void level_up()
 	//printf("var:%d\n",var);
 	stararr[0].key=0,stararr[1].key=0, stararr[2].key=0;
 	countstar=2;
+	bridgeflag3=0;
+	bridgeflag5=0;
 	createRectangle();
 	initialise_all();
 }
@@ -1531,7 +1694,7 @@ void initialise_all()
 	cube1.rotationX=0.0;
 	cube1.rotationY=0.0;
 	cube1.object=createCube(&cube1);
-
+	direction=0;
 	//cube2
 	cube2.x=block2X;
 	cube2.y=block2Y;
@@ -1555,6 +1718,7 @@ int main (int argc, char** argv)
 	initialise_all();
 	last_update_time = glfwGetTime();
 	/* Draw in loop */
+	audio_init();
 	while (!glfwWindowShouldClose(window)) {
 
 		if(countstar==-1)
@@ -1573,6 +1737,7 @@ int main (int argc, char** argv)
 			camera_rotation_angle -= 720;
 
 		last_update_time = current_time;
+		audio_play();
 		draw(window, 0, 0, 1.0, 1.0, 1, 1, 1);
 
 		// Swap Frame Buffer in double buffering
@@ -1581,6 +1746,7 @@ int main (int argc, char** argv)
 		// Poll for Keyboard and mouse events
 		glfwPollEvents();
 	}
+	audio_close();
 	glfwTerminate();
 	//    exit(EXIT_SUCCESS);
 }
